@@ -38,10 +38,12 @@ async function run() {
 
     const db = client.db("jobPortal");
     const Jocollection = db.collection("AllJobs");
+    const applicationCollection = db.collection("jobApplications");
+
 
 
     app.post('/jobs', async (req, res) => {
-       const producted = req.body;
+      const producted = req.body;
       const result = await Jocollection.insertOne(producted)
       res.send(result);
    });
@@ -69,25 +71,66 @@ async function run() {
     res.send(jobs);
   });
   
-  
+   
     
     
 
-  app.get('/jobsperson/email', async (req, res) => {
-    const email = req.query.email; 
-    const query = { "employer.email": email };  // এখানে employer.email ফিল্ড ধরে নিচ্ছি
+  app.get('/jobsUser/email', async (req, res) => {
+    const email = req.query.email;
+    const query = { "employer.email": email };
+
     const result = await Jocollection.find(query).toArray();
     res.send(result);
   });
   
   
+  app.get('/jobdetlis/:id', async (req, res) => {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const result = await Jocollection.findOne(query);
+    res.send(result);
+  });
+    
+    
+    
+    
+  app.post('/jobapply', async (req, res) => {
+    const producted = req.body;
 
-   //  app.get('/groups/:id', async (req, res) => {
-   //   const id = req.params.id;
-   //   const query = { _id: new ObjectId(id) };
-   //   const result = await Jocollection.findOne(query);
-   //   res.send(result);
-   //  });
+    console.log(producted);
+    
+    const result = await applicationCollection.insertOne(producted)
+    res.send(result);
+  }); 
+    
+    app.get("/jobapply", async (req, res) => {
+      const email = req.query.email;
+      const query = {
+       email
+      }
+      const result = await applicationCollection.find(query).toArray();
+      for (const applaction of result) {
+        const jobId = applaction.jobId;
+        const jobQuery = { _id: new ObjectId(jobId) }
+        const job = await Jocollection.findOne(jobQuery);
+        applaction.job = job;
+        applaction.jobTitle = job.title;
+      }
+      res.send(result);
+    })
+
+
+
+    app.get("/appletion/job/:job_id", async (req, res) => {
+      const job_id = req.params.job_id;
+      const query = { jobId: job_id }
+      const result = await applicationCollection.find(query).toArray();
+
+      res.send(result)
+    })
+  
+
+  
 
    //  app.delete('/groups/:id', async (req, res) => {
    //    const id = req.params.id;
