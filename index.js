@@ -2,19 +2,47 @@
 const express = require("express");
 require("dotenv").config(); 
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const cookieParser = require('cookie-parser');
+
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const { ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 8000;
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173'],
+  credentials: true
+}));
 app.use(express.json());
 
+app.use(cookieParser());
 
-// JO4R6PJcQGzW0aPZ
+const logger = (req, res, next) => {
+  console.log('inside the logger middlware');
 
-// JobProtle
+  
+}
+
+const verifyToken = (req, res, next) => {
+  console.log("cooki in the middlware", req.cookies);
+
+  const token = req?.cookies?.token;
+  if (!token) {
+
+    return res.status(401).send({ message: "unautharized access" });
+    
+  }
+  jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, decode) => {
+      if (err) {
+        return res.status(401).send({ message: "unautharized access" });
+    }
+    req.decode = decode;
+
+    next();
+  })
+}
 
 
 
@@ -41,6 +69,36 @@ async function run() {
     const applicationCollection = db.collection("jobApplications");
 
 
+    app.post('/jwt', async (req, res) => {
+      const { email } = req.body;
+    
+      const user = { email };
+    
+      const token = jwt.sign(user, process.env.JWT_ACCESS_SECRET, {
+        expiresIn: "1h"
+      });
+    
+      // ✅ কুকিতে টোকেন সেট করো
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: false
+          
+          // process.env.NODE_ENV === "production", // HTTPS থাকলে true হওয়া ভালো
+        // sameSite: 'strict', // CSRF এর জন্য ভালো
+        // maxAge: 60 * 60 * 1000 // 1 hour in milliseconds
+      });
+    
+      res.send({ success: true });
+    });
+    
+    
+
+
+
+
+
+
+
 
     app.post('/jobs', async (req, res) => {
       const producted = req.body;
@@ -53,7 +111,7 @@ async function run() {
   //   const products = await Jocollection.find().toArray();
   //   res.send(products);
   //  });
-  app.get('/jobs', async (req, res) => {
+  app.get('/jobs',  async (req, res) => {
     const search = req.query.search;
     let query = {};
   
@@ -97,38 +155,62 @@ async function run() {
   app.post('/jobapply', async (req, res) => {
     const producted = req.body;
 
-    console.log(producted);
     
     const result = await applicationCollection.insertOne(producted)
     res.send(result);
   }); 
     
-    app.get("/jobapply", async (req, res) => {
+    app.get("/jobapply", verifyToken,  async (req, res) => {
       const email = req.query.email;
+
+      // console.log('inside applation', req.cookies);
+      
       const query = {
        email
       }
       const result = await applicationCollection.find(query).toArray();
       for (const applaction of result) {
         const jobId = applaction.jobId;
-        const jobQuery = { _id: new ObjectId(jobId) }
-        const job = await Jocollection.findOne(jobQuery);
-        applaction.job = job;
-        applaction.jobTitle = job.title;
+        let job = null;
+      
+        if (ObjectId.isValid(jobId)) {
+          job = await Jocollection.findOne({ _id: new ObjectId(jobId) });
+        }
+      
+        if (!job) {
+          job = await Jocollection.findOne({ _id: jobId });
+        }
+      
+        if (job) {
+          applaction.jobType = job.jobType;
+          applaction.jobTitle = job.title;
+          applaction.company = job.company;
+        } else {
+          applaction.jobType = "Unknown";
+          applaction.jobTitle = "Job Not Found";
+          applaction.company = "Unknown";
+        }
       }
+      
       res.send(result);
     })
 
 
 
     app.get("/appletion/job/:job_id", async (req, res) => {
-      const job_id = req.params.job_id;
-      const query = { jobId: job_id }
-      const result = await applicationCollection.find(query).toArray();
-
-      res.send(result)
-    })
-  
+      try {
+        const job_id = req.params.job_id;
+        const query = { jobId: job_id }; // jobId is string
+    
+        const result = await applicationCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching applicants:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+    
+    
 
   
 
